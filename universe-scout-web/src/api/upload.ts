@@ -1,7 +1,7 @@
 import request from './request'
 
 export interface UploadFileItem {
-  fileId: number
+  fileId: string
   originalFilename: string
   fileName: string
   filePath: string
@@ -15,21 +15,21 @@ export interface UploadFileItem {
 }
 
 export interface ImageFileItem extends UploadFileItem {
-  batchId: number
+  batchId: string
   batchNo?: string
   sourceType?: string
   previewUrl: string
 }
 
 export interface UploadResult {
-  batchId: number
+  batchId: string
   batchNo: string
   fileCount: number
   files: UploadFileItem[]
 }
 
 export interface UploadBatchItem {
-  batchId: number
+  batchId: string
   batchNo: string
   batchName: string
   sourceType: string
@@ -81,20 +81,20 @@ export function getUploadBatches(params: {
   return request.get<ApiResult<PageResult<UploadBatchItem>>>('/files/batches', { params })
 }
 
-export function getUploadBatchDetail(batchId: number) {
+export function getUploadBatchDetail(batchId: string) {
   return request.get<ApiResult<UploadBatchDetail>>(`/files/batches/${batchId}`)
 }
 
 export function getImageFiles(params: {
   pageNum?: number
   pageSize?: number
-  batchId?: number | string
+  batchId?: string
   fileType?: string
   keyword?: string
 }) {
   return request.get<ApiResult<PageResult<ImageFileItem>>>('/files/images', { params })
 }
 
-export function deleteImageFile(fileId: number) {
+export function deleteImageFile(fileId: string) {
   return request.delete<ApiResult<null>>(`/files/images/${fileId}`)
 }

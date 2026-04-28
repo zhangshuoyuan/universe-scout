@@ -45,7 +45,8 @@ universe:
 
 vision:
   model:
-    base-url: http://localhost:9999/mock
-    api-key: mock-api-key
-    model-name: mock-vision-model
-    timeout-seconds: 60
+    provider: openai-compatible
+    base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+    api-key: sk-851b5ff353324ce8b2c20c8baf865bc9
+    model-name: qwen3-vl-flash
+    timeout-seconds: 120

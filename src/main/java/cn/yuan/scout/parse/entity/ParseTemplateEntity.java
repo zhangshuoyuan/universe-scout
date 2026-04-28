@@ -1,4 +1,4 @@
-package cn.yuan.scout.file.entity;
+package cn.yuan.scout.parse.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -9,31 +9,21 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("upload_batch")
-public class UploadBatchEntity {
+@TableName("parse_template")
+public class ParseTemplateEntity {
 
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
-    private String batchNo;
+    private String templateCode;
 
-    private String batchName;
+    private String templateName;
 
-    private String sourceType;
+    private String prompt;
 
-    private Long seasonId;
+    private String jsonSchema;
 
-    private String status;
-
-    private Integer totalFiles;
-
-    private Integer successCount;
-
-    private Integer failedCount;
-
-    private String remark;
-
-    private Long createdBy;
+    private Integer status;
 
     private LocalDateTime createdAt;
 

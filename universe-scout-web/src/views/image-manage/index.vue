@@ -3,7 +3,7 @@
     <header class="page-head">
       <div>
         <h2>图片管理</h2>
-        <p>集中查看已入库图片，支持预览、筛选和删除。</p>
+        <p>集中查看已入库图片，支持预览、筛选、复制路径和删除。</p>
       </div>
       <button type="button" class="ghost-btn" @click="loadImages">刷新</button>
     </header>
@@ -43,8 +43,8 @@
         <strong>{{ images.length }}</strong>
       </article>
       <article>
-        <span>存储状态</span>
-        <strong>本地</strong>
+        <span>删除状态</span>
+        <strong>{{ deletingId ? '处理中' : '就绪' }}</strong>
       </article>
     </section>
 
@@ -61,7 +61,14 @@
         </div>
         <div class="card-actions">
           <button type="button" class="ghost-btn" @click="copyPath(image.filePath)">复制路径</button>
-          <button type="button" class="danger-btn" @click="removeImage(image)">删除</button>
+          <button
+            type="button"
+            class="danger-btn"
+            :disabled="deletingId === image.fileId"
+            @click="removeImage(image)"
+          >
+            {{ deletingId === image.fileId ? '删除中' : '删除' }}
+          </button>
         </div>
       </article>
 
@@ -103,6 +110,7 @@ const total = ref(0)
 const pages = ref(0)
 const images = ref<ImageFileItem[]>([])
 const previewImage = ref<ImageFileItem | null>(null)
+const deletingId = ref<string | null>(null)
 const message = ref('')
 const isError = ref(false)
 const filters = reactive({
@@ -116,16 +124,29 @@ onMounted(() => {
 })
 
 async function loadImages() {
-  const { data } = await getImageFiles({
-    pageNum: pageNum.value,
-    pageSize,
-    keyword: filters.keyword || undefined,
-    fileType: filters.fileType || undefined,
-    batchId: filters.batchId || undefined,
-  })
-  images.value = data.data.records
-  total.value = data.data.total
-  pages.value = data.data.pages
+  message.value = ''
+  isError.value = false
+  try {
+    const { data } = await getImageFiles({
+      pageNum: pageNum.value,
+      pageSize,
+      keyword: filters.keyword || undefined,
+      fileType: filters.fileType || undefined,
+      batchId: filters.batchId || undefined,
+    })
+    if (data.code !== 0 || !data.data) {
+      throw new Error(data.message || 'load failed')
+    }
+    images.value = data.data.records
+    total.value = data.data.total
+    pages.value = data.data.pages
+  } catch {
+    images.value = []
+    total.value = 0
+    pages.value = 0
+    isError.value = true
+    message.value = '图片列表加载失败，请确认后端已重启到最新版本。'
+  }
 }
 
 function search() {
@@ -157,18 +178,26 @@ async function removeImage(image: ImageFileItem) {
   const confirmed = window.confirm(`确认删除图片“${image.originalFilename}”吗？`)
   if (!confirmed) return
 
+  deletingId.value = image.fileId
   message.value = ''
   isError.value = false
   try {
-    await deleteImageFile(image.fileId)
-    message.value = '图片已删除。'
+    const { data } = await deleteImageFile(image.fileId)
+    if (data.code !== 0) {
+      throw new Error(data.message || 'delete failed')
+    }
+    images.value = images.value.filter((item) => item.fileId !== image.fileId)
+    total.value = Math.max(0, total.value - 1)
     if (previewImage.value?.fileId === image.fileId) {
       previewImage.value = null
     }
+    message.value = '图片已删除。'
     await loadImages()
   } catch {
     isError.value = true
-    message.value = '删除失败，请确认后端服务和本地文件权限。'
+    message.value = '删除失败，请确认后端服务已重启到最新版本。'
+  } finally {
+    deletingId.value = null
   }
 }
 
@@ -380,7 +409,6 @@ button:disabled {
 
 .card-actions button {
   flex: 1;
-  justify-content: center;
 }
 
 .empty {

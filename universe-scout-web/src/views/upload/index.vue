@@ -199,7 +199,7 @@ async function loadBatches() {
   batches.value = data.data.records
 }
 
-async function loadDetail(batchId: number) {
+async function loadDetail(batchId: string) {
   const { data } = await getUploadBatchDetail(batchId)
   detail.value = data.data
 }

@@ -2,6 +2,7 @@ package cn.yuan.scout.file.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -36,5 +37,6 @@ public class UploadFileEntity {
 
     private LocalDateTime createdAt;
 
+    @TableLogic
     private Integer deleted;
 }

@@ -12,7 +12,9 @@
         <router-link to="/dashboard">总览看板</router-link>
         <router-link to="/upload">上传中心</router-link>
         <router-link to="/images">图片管理</router-link>
+        <router-link to="/players">球员管理</router-link>
         <router-link to="/parse-task">解析任务</router-link>
+        <router-link to="/prompt-template">提示词管理</router-link>
       </nav>
     </aside>
     <div class="workspace">
@@ -156,7 +158,7 @@
   }
 
   .nav {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .content {

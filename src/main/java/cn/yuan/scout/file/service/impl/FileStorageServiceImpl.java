@@ -16,6 +16,7 @@ import cn.yuan.scout.file.service.FileStorageService;
 import cn.yuan.scout.file.service.UploadBatchService;
 import cn.yuan.scout.file.service.UploadFileService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
@@ -205,6 +206,7 @@ public class FileStorageServiceImpl implements FileStorageService {
 
         LambdaQueryWrapper<UploadFileEntity> wrapper = new LambdaQueryWrapper<UploadFileEntity>()
                 .eq(UploadFileEntity::getDeleted, 0)
+                .eq(UploadFileEntity::getStatus, "UPLOADED")
                 .eq(batchId != null, UploadFileEntity::getBatchId, batchId)
                 .eq(StringUtils.hasText(fileType), UploadFileEntity::getFileType, normalizeFileType(fileType))
                 .like(StringUtils.hasText(keyword), UploadFileEntity::getOriginalFilename, keyword)
@@ -236,11 +238,23 @@ public class FileStorageServiceImpl implements FileStorageService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteImage(Long fileId) {
-        UploadFileEntity file = getActiveFile(fileId);
-        file.setDeleted(1);
+        UploadFileEntity file = getActiveFileOrNull(fileId);
+        if (file == null) {
+            return;
+        }
         file.setStatus("FAILED");
         file.setErrorMessage("deleted by admin");
-        uploadFileService.updateById(file);
+        boolean deleted = uploadFileService.update(
+                new LambdaUpdateWrapper<UploadFileEntity>()
+                        .eq(UploadFileEntity::getId, fileId)
+                        .eq(UploadFileEntity::getDeleted, 0)
+                        .set(UploadFileEntity::getStatus, "FAILED")
+                        .set(UploadFileEntity::getErrorMessage, "deleted by admin")
+                        .set(UploadFileEntity::getDeleted, 1)
+        );
+        if (!deleted) {
+            throw new BizException(ErrorCode.SYSTEM_ERROR, "failed to delete image record");
+        }
 
         UploadBatchEntity batch = uploadBatchService.getById(file.getBatchId());
         if (batch != null && batch.getDeleted() != null && batch.getDeleted() == 0) {
@@ -254,8 +268,8 @@ public class FileStorageServiceImpl implements FileStorageService {
 
         try {
             Files.deleteIfExists(Path.of(file.getFilePath()));
-        } catch (IOException e) {
-            throw new BizException(ErrorCode.SYSTEM_ERROR, "database record deleted, but local file deletion failed", e);
+        } catch (IOException ignored) {
+            // The database record is the source of truth for image management.
         }
     }
 
@@ -402,15 +416,20 @@ public class FileStorageServiceImpl implements FileStorageService {
     }
 
     private UploadFileEntity getActiveFile(Long fileId) {
+        UploadFileEntity file = getActiveFileOrNull(fileId);
+        if (file == null) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "image record does not exist");
+        }
+        return file;
+    }
+
+    private UploadFileEntity getActiveFileOrNull(Long fileId) {
         UploadFileEntity file = uploadFileService.getOne(
                 new LambdaQueryWrapper<UploadFileEntity>()
                         .eq(UploadFileEntity::getId, fileId)
                         .eq(UploadFileEntity::getDeleted, 0)
                         .last("limit 1")
         );
-        if (file == null) {
-            throw new BizException(ErrorCode.PARAM_ERROR, "image record does not exist");
-        }
         return file;
     }
 
