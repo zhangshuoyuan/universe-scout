@@ -18,6 +18,8 @@ export interface TeamItem {
 
 export interface PlayerItem {
   playerId: string
+  playerProfileId: string
+  playerKey?: string
   playerName: string
   playerNameCn?: string
   avatarUrl?: string
@@ -53,6 +55,16 @@ export interface IntegratePlayersResult {
   skippedCount: number
 }
 
+export interface PlayerProfileItem {
+  profileId: string
+  playerKey?: string
+  playerName: string
+  playerNameCn?: string
+  avatarUrl?: string
+  position?: string
+  updatedAt?: string
+}
+
 export function getPlayerSeasons() {
   return request.get<ApiResult<SeasonItem[]>>('/players/seasons')
 }
@@ -68,16 +80,25 @@ export function getPlayers(params: {
   teamId?: string
   keyword?: string
   rosterStatus?: string
+  position?: string
 }) {
   return request.get<ApiResult<PageResult<PlayerItem>>>('/players', { params })
+}
+
+export function getPlayerProfiles(params: {
+  pageNum?: number
+  pageSize?: number
+  keyword?: string
+}) {
+  return request.get<ApiResult<PageResult<PlayerProfileItem>>>('/players/profiles', { params })
 }
 
 export function integratePlayers(data: IntegratePlayersParams) {
   return request.post<ApiResult<IntegratePlayersResult>>('/players/integrate', data)
 }
 
-export function uploadPlayerAvatar(playerId: string, file: File) {
+export function uploadPlayerAvatar(profileId: string, file: File) {
   const formData = new FormData()
   formData.append('file', file)
-  return request.post<ApiResult<string>>(`/players/${playerId}/avatar`, formData)
+  return request.post<ApiResult<string>>(`/players/profiles/${profileId}/avatar`, formData)
 }

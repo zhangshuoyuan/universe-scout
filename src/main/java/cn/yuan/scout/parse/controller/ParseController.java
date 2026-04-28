@@ -10,6 +10,8 @@ import cn.yuan.scout.parse.dto.ParseTemplateResponse;
 import cn.yuan.scout.parse.service.ParseTaskService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -56,5 +58,10 @@ public class ParseController {
     public Result<Void> startTask(@PathVariable Long taskId) {
         parseTaskService.startTask(taskId);
         return Result.success();
+    }
+
+    @GetMapping("/tasks/{taskId}/failed-images.zip")
+    public ResponseEntity<Resource> exportFailedImages(@PathVariable Long taskId) {
+        return parseTaskService.exportFailedImages(taskId);
     }
 }

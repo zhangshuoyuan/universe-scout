@@ -81,3 +81,9 @@ export function getParseTaskDetail(taskId: string) {
 export function startParseTask(taskId: string) {
   return request.post<ApiResult<null>>(`/parse/tasks/${taskId}/start`)
 }
+
+export function exportFailedImages(taskId: string) {
+  return request.get<Blob>(`/parse/tasks/${taskId}/failed-images.zip`, {
+    responseType: 'blob',
+  })
+}

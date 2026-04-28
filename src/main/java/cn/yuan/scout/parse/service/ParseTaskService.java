@@ -6,6 +6,8 @@ import cn.yuan.scout.parse.dto.CreateParseTaskResponse;
 import cn.yuan.scout.parse.dto.ParseTaskDetailResponse;
 import cn.yuan.scout.parse.dto.ParseTaskListItemResponse;
 import cn.yuan.scout.parse.dto.ParseTemplateResponse;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 
@@ -20,4 +22,6 @@ public interface ParseTaskService {
     ParseTaskDetailResponse getTaskDetail(Long taskId);
 
     void startTask(Long taskId);
+
+    ResponseEntity<Resource> exportFailedImages(Long taskId);
 }

@@ -10,11 +10,14 @@ import cn.yuan.scout.parse.service.VisionParseResultService;
 import cn.yuan.scout.universe.dto.IntegratePlayersRequest;
 import cn.yuan.scout.universe.dto.IntegratePlayersResponse;
 import cn.yuan.scout.universe.dto.PlayerListItemResponse;
+import cn.yuan.scout.universe.dto.PlayerProfileResponse;
 import cn.yuan.scout.universe.dto.SeasonResponse;
 import cn.yuan.scout.universe.dto.TeamResponse;
 import cn.yuan.scout.universe.entity.PlayerEntity;
+import cn.yuan.scout.universe.entity.PlayerProfileEntity;
 import cn.yuan.scout.universe.entity.SeasonEntity;
 import cn.yuan.scout.universe.entity.TeamEntity;
+import cn.yuan.scout.universe.service.PlayerProfileService;
 import cn.yuan.scout.universe.service.PlayerRecordService;
 import cn.yuan.scout.universe.service.PlayerService;
 import cn.yuan.scout.universe.service.SeasonService;
@@ -90,6 +93,7 @@ public class PlayerServiceImpl implements PlayerService {
 
     private final SeasonService seasonService;
     private final TeamService teamService;
+    private final PlayerProfileService playerProfileService;
     private final PlayerRecordService playerRecordService;
     private final VisionParseResultService visionParseResultService;
     private final UniverseFileProperties fileProperties;
@@ -147,30 +151,57 @@ public class PlayerServiceImpl implements PlayerService {
             Long seasonId,
             Long teamId,
             String keyword,
-            String rosterStatus
+            String rosterStatus,
+            String position
     ) {
         long safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
         long safePageSize = pageSize == null || pageSize < 1 ? 12 : Math.min(pageSize, 100);
+
+        List<Long> profileIds = findProfileIds(keyword);
+        if (StringUtils.hasText(keyword) && profileIds.isEmpty()) {
+            return PageResult.of(List.of(), 0L, safePageNum, safePageSize);
+        }
 
         LambdaQueryWrapper<PlayerEntity> wrapper = new LambdaQueryWrapper<PlayerEntity>()
                 .eq(PlayerEntity::getDeleted, 0)
                 .eq(seasonId != null, PlayerEntity::getSeasonId, seasonId)
                 .eq(teamId != null, PlayerEntity::getTeamId, teamId)
                 .eq(StringUtils.hasText(rosterStatus), PlayerEntity::getRosterStatus, rosterStatus)
-                .and(StringUtils.hasText(keyword), query -> query
-                        .like(PlayerEntity::getPlayerName, keyword)
-                        .or()
-                        .like(PlayerEntity::getPlayerNameCn, keyword)
-                )
+                .eq(StringUtils.hasText(position), PlayerEntity::getPosition, position)
+                .in(StringUtils.hasText(keyword), PlayerEntity::getPlayerProfileId, profileIds)
                 .orderByAsc(PlayerEntity::getRosterStatus)
+                .orderByDesc(StringUtils.hasText(position), PlayerEntity::getOverallRating)
                 .orderByAsc(PlayerEntity::getTeamId)
                 .orderByAsc(PlayerEntity::getLineupPosition)
-                .orderByAsc(PlayerEntity::getPlayerName);
+                .orderByAsc(PlayerEntity::getPlayerProfileId);
 
         Page<PlayerEntity> page = playerRecordService.page(new Page<>(safePageNum, safePageSize), wrapper);
         List<PlayerListItemResponse> records = page.getRecords()
                 .stream()
                 .map(this::toPlayerResponse)
+                .toList();
+        return PageResult.of(records, page.getTotal(), safePageNum, safePageSize);
+    }
+
+    @Override
+    public PageResult<PlayerProfileResponse> pageProfiles(Long pageNum, Long pageSize, String keyword) {
+        long safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        long safePageSize = pageSize == null || pageSize < 1 ? 12 : Math.min(pageSize, 100);
+
+        LambdaQueryWrapper<PlayerProfileEntity> wrapper = new LambdaQueryWrapper<PlayerProfileEntity>()
+                .eq(PlayerProfileEntity::getDeleted, 0)
+                .and(StringUtils.hasText(keyword), query -> query
+                        .like(PlayerProfileEntity::getPlayerName, keyword)
+                        .or()
+                        .like(PlayerProfileEntity::getPlayerNameCn, keyword)
+                )
+                .orderByDesc(PlayerProfileEntity::getUpdatedAt)
+                .orderByDesc(PlayerProfileEntity::getCreatedAt);
+
+        Page<PlayerProfileEntity> page = playerProfileService.page(new Page<>(safePageNum, safePageSize), wrapper);
+        List<PlayerProfileResponse> records = page.getRecords()
+                .stream()
+                .map(this::toProfileResponse)
                 .toList();
         return PageResult.of(records, page.getTotal(), safePageNum, safePageSize);
     }
@@ -246,8 +277,8 @@ public class PlayerServiceImpl implements PlayerService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String uploadAvatar(Long playerId, MultipartFile file) {
-        PlayerEntity player = getPlayer(playerId);
+    public String uploadAvatar(Long profileId, MultipartFile file) {
+        PlayerProfileEntity profile = getProfile(profileId);
         if (file == null || file.isEmpty()) {
             throw new BizException(ErrorCode.PARAM_ERROR, "请选择头像文件");
         }
@@ -266,18 +297,18 @@ public class PlayerServiceImpl implements PlayerService {
             throw new BizException(ErrorCode.SYSTEM_ERROR, "头像保存失败", e);
         }
 
-        player.setAvatarPath(target.toAbsolutePath().toString());
-        playerRecordService.updateById(player);
-        return avatarUrl(player.getId(), player.getAvatarPath());
+        profile.setAvatarPath(target.toAbsolutePath().toString());
+        playerProfileService.updateById(profile);
+        return avatarUrl(profile.getId(), profile.getAvatarPath());
     }
 
     @Override
-    public ResponseEntity<Resource> previewAvatar(Long playerId) {
-        PlayerEntity player = getPlayer(playerId);
-        if (!StringUtils.hasText(player.getAvatarPath())) {
+    public ResponseEntity<Resource> previewAvatar(Long profileId) {
+        PlayerProfileEntity profile = getProfile(profileId);
+        if (!StringUtils.hasText(profile.getAvatarPath())) {
             throw new BizException(ErrorCode.PARAM_ERROR, "球员暂无头像");
         }
-        Path path = Path.of(player.getAvatarPath()).normalize();
+        Path path = Path.of(profile.getAvatarPath()).normalize();
         if (!Files.exists(path) || !Files.isRegularFile(path)) {
             throw new BizException(ErrorCode.PARAM_ERROR, "头像文件不存在");
         }
@@ -295,6 +326,7 @@ public class PlayerServiceImpl implements PlayerService {
     ) throws Exception {
         String playerName = firstText(playerNode, "playerName", "playerNameEn", "playerEnglishName");
         String playerNameCn = firstText(playerNode, "playerNameCn", "playerNameZh", "playerChineseName", "playerCnName");
+        String playerKey = firstText(playerNode, "playerKey", "player_key");
         if (!StringUtils.hasText(playerName) && StringUtils.hasText(playerNameCn)) {
             playerName = playerNameCn;
         }
@@ -304,54 +336,51 @@ public class PlayerServiceImpl implements PlayerService {
 
         String cleanPlayerName = playerName.trim();
         String cleanPlayerNameCn = trimToNull(playerNameCn);
+        String playerNumber = firstText(playerNode, "playerNumber", "jerseyNumber", "number", "no");
+        String cleanPlayerKey = normalizePlayerKey(playerKey, cleanPlayerName, playerNumber);
+        PlayerProfileEntity profile = getOrCreateProfile(cleanPlayerKey, cleanPlayerName, cleanPlayerNameCn);
         String position = text(playerNode, "position");
+        Integer overallRating = firstInt(playerNode, "overallRating", "overall", "rating", "ovr", "score");
+        Integer potentialRating = firstInt(playerNode, "potentialRating", "potential", "pot");
         String dataJson = objectMapper.writeValueAsString(playerNode);
 
-        int historyCount = markOldTeamsAsHistory(season.getId(), team.getId(), cleanPlayerName);
+        int historyCount = markOldTeamsAsHistory(season.getId(), team.getId(), profile.getId());
         PlayerEntity existing = playerRecordService.getOne(
                 new LambdaQueryWrapper<PlayerEntity>()
                         .eq(PlayerEntity::getDeleted, 0)
                         .eq(PlayerEntity::getSeasonId, season.getId())
                         .eq(PlayerEntity::getTeamId, team.getId())
-                        .eq(PlayerEntity::getPlayerName, cleanPlayerName)
+                        .eq(PlayerEntity::getPlayerProfileId, profile.getId())
                         .last("limit 1")
         );
 
-        if (existing == null) {
-            PlayerEntity player = new PlayerEntity();
-            player.setSeasonId(season.getId());
-            player.setTeamId(team.getId());
-            player.setPlayerName(cleanPlayerName);
-            player.setPlayerNameCn(cleanPlayerNameCn);
-            player.setLineupPosition(position);
-            player.setPosition(position);
-            player.setSourceResultId(result.getId());
-            player.setRosterStatus("CURRENT");
-            player.setDataJson(dataJson);
-            player.setDeleted(0);
-            playerRecordService.save(player);
-            return IntegrateOneResult.created(historyCount, season.getId() + ":" + team.getId() + ":" + cleanPlayerName);
+        if (existing != null) {
+            return IntegrateOneResult.skipped(historyCount);
         }
 
-        existing.setLineupPosition(position);
-        existing.setPosition(position);
-        if (StringUtils.hasText(cleanPlayerNameCn)) {
-            existing.setPlayerNameCn(cleanPlayerNameCn);
-        }
-        existing.setSourceResultId(result.getId());
-        existing.setRosterStatus("CURRENT");
-        existing.setDataJson(dataJson);
-        playerRecordService.updateById(existing);
-        return IntegrateOneResult.updated(historyCount, season.getId() + ":" + team.getId() + ":" + cleanPlayerName);
+        PlayerEntity player = new PlayerEntity();
+        player.setSeasonId(season.getId());
+        player.setTeamId(team.getId());
+        player.setPlayerProfileId(profile.getId());
+        player.setLineupPosition(position);
+        player.setPosition(position);
+        player.setOverallRating(overallRating);
+        player.setPotentialRating(potentialRating);
+        player.setSourceResultId(result.getId());
+        player.setRosterStatus("CURRENT");
+        player.setDataJson(dataJson);
+        player.setDeleted(0);
+        playerRecordService.save(player);
+        return IntegrateOneResult.created(historyCount, season.getId() + ":" + team.getId() + ":" + profile.getId());
     }
 
-    private int markOldTeamsAsHistory(Long seasonId, Long currentTeamId, String playerName) {
+    private int markOldTeamsAsHistory(Long seasonId, Long currentTeamId, Long profileId) {
         List<PlayerEntity> oldRecords = playerRecordService.list(
                 new LambdaQueryWrapper<PlayerEntity>()
                         .eq(PlayerEntity::getDeleted, 0)
                         .eq(PlayerEntity::getSeasonId, seasonId)
                         .ne(PlayerEntity::getTeamId, currentTeamId)
-                        .eq(PlayerEntity::getPlayerName, playerName)
+                        .eq(PlayerEntity::getPlayerProfileId, profileId)
                         .eq(PlayerEntity::getRosterStatus, "CURRENT")
         );
         if (oldRecords.isEmpty()) {
@@ -362,7 +391,7 @@ public class PlayerServiceImpl implements PlayerService {
                         .eq(PlayerEntity::getDeleted, 0)
                         .eq(PlayerEntity::getSeasonId, seasonId)
                         .ne(PlayerEntity::getTeamId, currentTeamId)
-                        .eq(PlayerEntity::getPlayerName, playerName)
+                        .eq(PlayerEntity::getPlayerProfileId, profileId)
                         .eq(PlayerEntity::getRosterStatus, "CURRENT")
                         .set(PlayerEntity::getRosterStatus, "HISTORY")
         );
@@ -467,14 +496,81 @@ public class PlayerServiceImpl implements PlayerService {
         return player;
     }
 
+    private PlayerProfileEntity getProfile(Long profileId) {
+        PlayerProfileEntity profile = playerProfileService.getOne(
+                new LambdaQueryWrapper<PlayerProfileEntity>()
+                        .eq(PlayerProfileEntity::getId, profileId)
+                        .eq(PlayerProfileEntity::getDeleted, 0)
+                        .last("limit 1")
+        );
+        if (profile == null) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "球员主表记录不存在");
+        }
+        return profile;
+    }
+
+    private PlayerProfileEntity getOrCreateProfile(String playerKey, String playerName, String playerNameCn) {
+        PlayerProfileEntity profile = playerProfileService.getOne(
+                new LambdaQueryWrapper<PlayerProfileEntity>()
+                        .eq(PlayerProfileEntity::getDeleted, 0)
+                        .eq(PlayerProfileEntity::getPlayerKey, playerKey)
+                        .last("limit 1")
+        );
+        if (profile != null) {
+            boolean changed = false;
+            if (!StringUtils.hasText(profile.getPlayerName()) && StringUtils.hasText(playerName)) {
+                profile.setPlayerName(playerName);
+                changed = true;
+            }
+            if (!StringUtils.hasText(profile.getPlayerNameCn()) && StringUtils.hasText(playerNameCn)) {
+                profile.setPlayerNameCn(playerNameCn);
+                changed = true;
+            }
+            if (changed) {
+                playerProfileService.updateById(profile);
+            }
+            return profile;
+        }
+
+        profile = new PlayerProfileEntity();
+        profile.setPlayerKey(playerKey);
+        profile.setPlayerName(playerName);
+        profile.setPlayerNameCn(playerNameCn);
+        profile.setDeleted(0);
+        playerProfileService.save(profile);
+        return profile;
+    }
+
+    private List<Long> findProfileIds(String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return List.of();
+        }
+        return playerProfileService.list(
+                        new LambdaQueryWrapper<PlayerProfileEntity>()
+                                .select(PlayerProfileEntity::getId)
+                                .eq(PlayerProfileEntity::getDeleted, 0)
+                                .and(query -> query
+                                        .like(PlayerProfileEntity::getPlayerName, keyword)
+                                        .or()
+                                        .like(PlayerProfileEntity::getPlayerNameCn, keyword)
+                                )
+                )
+                .stream()
+                .map(PlayerProfileEntity::getId)
+                .toList();
+    }
+
     private PlayerListItemResponse toPlayerResponse(PlayerEntity player) {
         SeasonEntity season = player.getSeasonId() == null ? null : seasonService.getById(player.getSeasonId());
         TeamEntity team = player.getTeamId() == null ? null : teamService.getById(player.getTeamId());
+        PlayerProfileEntity profile = player.getPlayerProfileId() == null ? null : playerProfileService.getById(player.getPlayerProfileId());
         return PlayerListItemResponse.builder()
                 .playerId(player.getId())
-                .playerName(player.getPlayerName())
-                .playerNameCn(player.getPlayerNameCn())
-                .avatarUrl(avatarUrl(player.getId(), player.getAvatarPath()))
+                .playerProfileId(player.getPlayerProfileId())
+                .playerKey(profile == null ? null : profile.getPlayerKey())
+                .playerName(profile == null ? null : profile.getPlayerName())
+                .playerNameCn(profile == null ? null : profile.getPlayerNameCn())
+                .avatarUrl(profile == null ? null : avatarUrl(profile.getId(), profile.getAvatarPath()))
                 .seasonId(player.getSeasonId())
                 .seasonName(season == null ? null : season.getSeasonName())
                 .teamId(player.getTeamId())
@@ -490,6 +586,41 @@ public class PlayerServiceImpl implements PlayerService {
                 .remark(player.getRemark())
                 .updatedAt(player.getUpdatedAt())
                 .build();
+    }
+
+    private PlayerProfileResponse toProfileResponse(PlayerProfileEntity profile) {
+        return PlayerProfileResponse.builder()
+                .profileId(profile.getId())
+                .playerKey(profile.getPlayerKey())
+                .playerName(profile.getPlayerName())
+                .playerNameCn(profile.getPlayerNameCn())
+                .avatarUrl(avatarUrl(profile.getId(), profile.getAvatarPath()))
+                .position(profilePosition(profile.getId()))
+                .updatedAt(profile.getUpdatedAt())
+                .build();
+    }
+
+    private String profilePosition(Long profileId) {
+        PlayerEntity player = playerRecordService.getOne(
+                new LambdaQueryWrapper<PlayerEntity>()
+                        .eq(PlayerEntity::getDeleted, 0)
+                        .eq(PlayerEntity::getPlayerProfileId, profileId)
+                        .eq(PlayerEntity::getRosterStatus, "CURRENT")
+                        .isNotNull(PlayerEntity::getPosition)
+                        .orderByDesc(PlayerEntity::getUpdatedAt)
+                        .last("limit 1")
+        );
+        if (player == null) {
+            player = playerRecordService.getOne(
+                    new LambdaQueryWrapper<PlayerEntity>()
+                            .eq(PlayerEntity::getDeleted, 0)
+                            .eq(PlayerEntity::getPlayerProfileId, profileId)
+                            .isNotNull(PlayerEntity::getPosition)
+                            .orderByDesc(PlayerEntity::getUpdatedAt)
+                            .last("limit 1")
+            );
+        }
+        return player == null ? null : player.getPosition();
     }
 
     private SeasonResponse toSeasonResponse(SeasonEntity season) {
@@ -553,8 +684,46 @@ public class PlayerServiceImpl implements PlayerService {
         return value.trim();
     }
 
+    private Integer firstInt(JsonNode node, String... fields) {
+        for (String field : fields) {
+            JsonNode value = node.path(field);
+            if (value.isMissingNode() || value.isNull()) {
+                continue;
+            }
+            if (value.isInt() || value.isLong()) {
+                return value.asInt();
+            }
+            String text = value.asText();
+            if (StringUtils.hasText(text)) {
+                try {
+                    return Integer.parseInt(text.replaceAll("[^0-9-]", ""));
+                } catch (Exception ignored) {
+                    // Try the next possible field.
+                }
+            }
+        }
+        return null;
+    }
+
+    private String normalizePlayerKey(String playerKey, String playerName, String playerNumber) {
+        String cleanPlayerKey = trimToNull(playerKey);
+        if (StringUtils.hasText(cleanPlayerKey)) {
+            return cleanPlayerKey.replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+        }
+        String cleanNumber = trimToNull(playerNumber);
+        String cleanName = playerName.replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+        if (!StringUtils.hasText(cleanNumber)) {
+            return cleanName;
+        }
+        cleanNumber = cleanNumber.replaceAll("[^0-9A-Za-z]", "");
+        if (!StringUtils.hasText(cleanNumber) || cleanName.endsWith(cleanNumber)) {
+            return cleanName;
+        }
+        return cleanName + cleanNumber;
+    }
+
     private String avatarUrl(Long playerId, String avatarPath) {
-        return StringUtils.hasText(avatarPath) ? "/api/players/" + playerId + "/avatar" : null;
+        return StringUtils.hasText(avatarPath) ? "/api/players/profiles/" + playerId + "/avatar" : null;
     }
 
     private String extension(String filename) {
@@ -613,6 +782,10 @@ public class PlayerServiceImpl implements PlayerService {
 
         private static IntegrateOneResult skipped() {
             return new IntegrateOneResult(false, false, true, 0, null);
+        }
+
+        private static IntegrateOneResult skipped(int historyCount) {
+            return new IntegrateOneResult(false, false, true, historyCount, null);
         }
     }
 }

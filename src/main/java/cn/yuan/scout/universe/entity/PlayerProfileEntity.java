@@ -9,33 +9,19 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("player")
-public class PlayerEntity {
+@TableName("player_profile")
+public class PlayerProfileEntity {
 
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
-    private Long playerProfileId;
+    private String playerKey;
 
-    private Long seasonId;
+    private String playerName;
 
-    private Long teamId;
+    private String playerNameCn;
 
-    private Long sourceResultId;
-
-    private String lineupPosition;
-
-    private String rosterStatus;
-
-    private String dataJson;
-
-    private String position;
-
-    private Integer overallRating;
-
-    private Integer potentialRating;
-
-    private String remark;
+    private String avatarPath;
 
     private LocalDateTime createdAt;
 

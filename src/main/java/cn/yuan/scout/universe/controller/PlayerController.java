@@ -5,6 +5,7 @@ import cn.yuan.scout.common.result.Result;
 import cn.yuan.scout.universe.dto.IntegratePlayersRequest;
 import cn.yuan.scout.universe.dto.IntegratePlayersResponse;
 import cn.yuan.scout.universe.dto.PlayerListItemResponse;
+import cn.yuan.scout.universe.dto.PlayerProfileResponse;
 import cn.yuan.scout.universe.dto.SeasonResponse;
 import cn.yuan.scout.universe.dto.TeamResponse;
 import cn.yuan.scout.universe.service.PlayerService;
@@ -48,9 +49,19 @@ public class PlayerController {
             @RequestParam(required = false) Long seasonId,
             @RequestParam(required = false) Long teamId,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String rosterStatus
+            @RequestParam(required = false) String rosterStatus,
+            @RequestParam(required = false) String position
     ) {
-        return Result.success(playerService.pagePlayers(pageNum, pageSize, seasonId, teamId, keyword, rosterStatus));
+        return Result.success(playerService.pagePlayers(pageNum, pageSize, seasonId, teamId, keyword, rosterStatus, position));
+    }
+
+    @GetMapping("/profiles")
+    public Result<PageResult<PlayerProfileResponse>> pageProfiles(
+            @RequestParam(defaultValue = "1") Long pageNum,
+            @RequestParam(defaultValue = "12") Long pageSize,
+            @RequestParam(required = false) String keyword
+    ) {
+        return Result.success(playerService.pageProfiles(pageNum, pageSize, keyword));
     }
 
     @PostMapping("/integrate")
@@ -58,13 +69,13 @@ public class PlayerController {
         return Result.success(playerService.integratePlayers(request));
     }
 
-    @PostMapping("/{playerId}/avatar")
-    public Result<String> uploadAvatar(@PathVariable Long playerId, @RequestPart("file") MultipartFile file) {
-        return Result.success(playerService.uploadAvatar(playerId, file));
+    @PostMapping("/profiles/{profileId}/avatar")
+    public Result<String> uploadAvatar(@PathVariable Long profileId, @RequestPart("file") MultipartFile file) {
+        return Result.success(playerService.uploadAvatar(profileId, file));
     }
 
-    @GetMapping("/{playerId}/avatar")
-    public ResponseEntity<Resource> previewAvatar(@PathVariable Long playerId) {
-        return playerService.previewAvatar(playerId);
+    @GetMapping("/profiles/{profileId}/avatar")
+    public ResponseEntity<Resource> previewAvatar(@PathVariable Long profileId) {
+        return playerService.previewAvatar(profileId);
     }
 }

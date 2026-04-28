@@ -39,6 +39,18 @@
       </label>
 
       <label>
+        <span>位置</span>
+        <select v-model="filters.position">
+          <option value="">全部位置</option>
+          <option value="PG">PG</option>
+          <option value="SG">SG</option>
+          <option value="SF">SF</option>
+          <option value="PF">PF</option>
+          <option value="C">C</option>
+        </select>
+      </label>
+
+      <label>
         <span>球员搜索</span>
         <input v-model.trim="filters.keyword" placeholder="输入中文名或英文名" @keyup.enter="search" />
       </label>
@@ -87,10 +99,6 @@
             </dl>
 
             <div class="card-actions">
-              <label class="avatar-upload">
-                上传头像
-                <input type="file" accept=".jpg,.jpeg,.png,.webp,image/*" @change="uploadAvatar(player, $event)" />
-              </label>
               <button type="button" class="ghost-btn" @click="openData(player)">查看数据</button>
             </div>
           </div>
@@ -169,7 +177,6 @@ import {
   getPlayerSeasons,
   getPlayerTeams,
   integratePlayers,
-  uploadPlayerAvatar,
   type IntegratePlayersResult,
   type PlayerItem,
   type SeasonItem,
@@ -194,6 +201,7 @@ const filters = reactive({
   teamId: '',
   keyword: '',
   rosterStatus: 'CURRENT',
+  position: '',
 })
 
 const integrateForm = reactive({
@@ -235,6 +243,7 @@ async function loadPlayers() {
     teamId: filters.teamId || undefined,
     keyword: filters.keyword || undefined,
     rosterStatus: filters.rosterStatus || undefined,
+    position: filters.position || undefined,
   })
   players.value = data.data?.records || []
   total.value = data.data?.total || 0
@@ -262,6 +271,7 @@ async function reset() {
   filters.teamId = ''
   filters.keyword = ''
   filters.rosterStatus = 'CURRENT'
+  filters.position = ''
   pageNum.value = 1
   await loadTeams()
   await loadPlayers()
@@ -297,20 +307,6 @@ async function submitIntegrate() {
     showMessage(error?.response?.data?.message || '整合失败，请检查解析结果是否存在。', true)
   } finally {
     integrating.value = false
-  }
-}
-
-async function uploadAvatar(player: PlayerItem, event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  try {
-    const { data } = await uploadPlayerAvatar(player.playerId, file)
-    player.avatarUrl = `${data.data}?t=${Date.now()}`
-    showMessage('头像已上传')
-  } catch (error: any) {
-    showMessage(error?.response?.data?.message || '头像上传失败', true)
   }
 }
 

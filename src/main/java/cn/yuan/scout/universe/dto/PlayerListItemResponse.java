@@ -11,6 +11,10 @@ public class PlayerListItemResponse {
 
     private Long playerId;
 
+    private Long playerProfileId;
+
+    private String playerKey;
+
     private String playerName;
 
     private String playerNameCn;

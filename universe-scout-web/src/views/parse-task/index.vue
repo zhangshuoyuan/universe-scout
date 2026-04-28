@@ -137,7 +137,18 @@
             <h3>任务详情</h3>
             <p>{{ detail.taskNo }}</p>
           </div>
-          <button type="button" class="ghost-btn" @click="detail = null">关闭</button>
+          <div class="modal-actions">
+            <button
+              v-if="canExportFailedImages(detail)"
+              type="button"
+              class="ghost-btn"
+              :disabled="exportingFailed"
+              @click="downloadFailedImages(detail)"
+            >
+              {{ exportingFailed ? '导出中...' : '导出失败数据' }}
+            </button>
+            <button type="button" class="ghost-btn" @click="detail = null">关闭</button>
+          </div>
         </header>
 
         <div class="meta">
@@ -234,6 +245,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { getUploadBatches, type UploadBatchItem } from '../../api/upload'
 import {
   createParseTask,
+  exportFailedImages,
   getParseTaskDetail,
   getParseTasks,
   getParseTemplates,
@@ -254,6 +266,7 @@ const detail = ref<ParseTaskDetail | null>(null)
 const showCreate = ref(false)
 const creating = ref(false)
 const startingId = ref<string | null>(null)
+const exportingFailed = ref(false)
 const message = ref('')
 const isError = ref(false)
 const textModal = reactive({
@@ -367,6 +380,33 @@ async function startTask(task: ParseTaskItem) {
     message.value = '启动解析失败，请确认任务状态和后端服务。'
   } finally {
     startingId.value = null
+  }
+}
+
+function canExportFailedImages(task: ParseTaskDetail) {
+  return task.results.some((result) => result.status === 'FAILED')
+}
+
+async function downloadFailedImages(task: ParseTaskDetail) {
+  exportingFailed.value = true
+  try {
+    const response = await exportFailedImages(task.taskId)
+    const blob = new Blob([response.data], { type: 'application/zip' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${task.taskNo}_failed_images.zip`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    message.value = '失败图片已导出'
+    isError.value = false
+  } catch {
+    isError.value = true
+    message.value = '导出失败数据失败，请确认失败图片仍存在于本地磁盘。'
+  } finally {
+    exportingFailed.value = false
   }
 }
 
@@ -695,6 +735,13 @@ pre {
   display: flex;
   justify-content: space-between;
   gap: 14px;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .meta {

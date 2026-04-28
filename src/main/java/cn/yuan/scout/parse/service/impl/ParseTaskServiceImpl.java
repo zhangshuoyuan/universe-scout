@@ -30,14 +30,30 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 @RequiredArgsConstructor
@@ -261,6 +277,32 @@ public class ParseTaskServiceImpl implements ParseTaskService {
         parseTaskRecordService.updateById(task);
     }
 
+    @Override
+    public ResponseEntity<Resource> exportFailedImages(Long taskId) {
+        ParseTaskEntity task = getTask(taskId);
+        List<VisionParseResultEntity> failedResults = visionParseResultService.list(
+                new LambdaQueryWrapper<VisionParseResultEntity>()
+                        .eq(VisionParseResultEntity::getTaskId, taskId)
+                        .eq(VisionParseResultEntity::getDeleted, 0)
+                        .eq(VisionParseResultEntity::getStatus, "FAILED")
+                        .orderByAsc(VisionParseResultEntity::getCreatedAt)
+        );
+        if (failedResults.isEmpty()) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "no failed images to export");
+        }
+
+        byte[] zipBytes = buildFailedImagesZip(failedResults);
+        String filename = task.getTaskNo() + "_failed_images.zip";
+        String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        ByteArrayResource resource = new ByteArrayResource(zipBytes);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + encodedFilename)
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .contentLength(zipBytes.length)
+                .cacheControl(CacheControl.noStore())
+                .body(resource);
+    }
+
     private VisionParseResultEntity parseOneImage(ParseTaskEntity task, ParseTemplateEntity template, UploadFileEntity file) {
         VisionParseResultEntity result = new VisionParseResultEntity();
         result.setTaskId(task.getId());
@@ -291,6 +333,63 @@ public class ParseTaskServiceImpl implements ParseTaskService {
             result.setErrorMessage(e.getMessage());
         }
         return result;
+    }
+
+    private byte[] buildFailedImagesZip(List<VisionParseResultEntity> failedResults) {
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+             ZipOutputStream zipOutputStream = new ZipOutputStream(outputStream)) {
+            Set<String> usedNames = new HashSet<>();
+            int index = 1;
+            for (VisionParseResultEntity result : failedResults) {
+                UploadFileEntity file = uploadFileService.getById(result.getFileId());
+                if (file == null || !StringUtils.hasText(file.getFilePath())) {
+                    continue;
+                }
+                Path path = Path.of(file.getFilePath()).normalize();
+                if (!Files.exists(path) || !Files.isRegularFile(path) || !Files.isReadable(path)) {
+                    continue;
+                }
+                String entryName = uniqueZipEntryName(index++, file.getOriginalFilename(), file.getFileName(), usedNames);
+                zipOutputStream.putNextEntry(new ZipEntry(entryName));
+                Files.copy(path, zipOutputStream);
+                zipOutputStream.closeEntry();
+            }
+            zipOutputStream.finish();
+            byte[] bytes = outputStream.toByteArray();
+            if (bytes.length == 0) {
+                throw new BizException(ErrorCode.PARAM_ERROR, "failed image files do not exist on disk");
+            }
+            return bytes;
+        } catch (IOException e) {
+            throw new BizException(ErrorCode.SYSTEM_ERROR, "failed to export failed images", e);
+        }
+    }
+
+    private String uniqueZipEntryName(int index, String originalFilename, String storedFilename, Set<String> usedNames) {
+        String filename = StringUtils.hasText(originalFilename) ? originalFilename : storedFilename;
+        if (!StringUtils.hasText(filename)) {
+            filename = "failed-image-" + index;
+        }
+        filename = Path.of(filename).getFileName().toString();
+        String candidate = String.format("%03d_%s", index, filename);
+        while (usedNames.contains(candidate)) {
+            candidate = String.format("%03d_%s_%s", index, IdUtil.fastSimpleUUID().substring(0, 6), filename);
+        }
+        usedNames.add(candidate);
+        return candidate;
+    }
+
+    private ParseTaskEntity getTask(Long taskId) {
+        ParseTaskEntity task = parseTaskRecordService.getOne(
+                new LambdaQueryWrapper<ParseTaskEntity>()
+                        .eq(ParseTaskEntity::getId, taskId)
+                        .eq(ParseTaskEntity::getDeleted, 0)
+                        .last("limit 1")
+        );
+        if (task == null) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "parse task does not exist");
+        }
+        return task;
     }
 
     private String finalStatus(int successCount, int failedCount, int totalCount) {

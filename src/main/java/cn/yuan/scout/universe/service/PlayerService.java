@@ -4,6 +4,7 @@ import cn.yuan.scout.common.result.PageResult;
 import cn.yuan.scout.universe.dto.IntegratePlayersRequest;
 import cn.yuan.scout.universe.dto.IntegratePlayersResponse;
 import cn.yuan.scout.universe.dto.PlayerListItemResponse;
+import cn.yuan.scout.universe.dto.PlayerProfileResponse;
 import cn.yuan.scout.universe.dto.SeasonResponse;
 import cn.yuan.scout.universe.dto.TeamResponse;
 import org.springframework.core.io.Resource;
@@ -18,11 +19,13 @@ public interface PlayerService {
 
     List<TeamResponse> listTeams(Long seasonId);
 
-    PageResult<PlayerListItemResponse> pagePlayers(Long pageNum, Long pageSize, Long seasonId, Long teamId, String keyword, String rosterStatus);
+    PageResult<PlayerListItemResponse> pagePlayers(Long pageNum, Long pageSize, Long seasonId, Long teamId, String keyword, String rosterStatus, String position);
+
+    PageResult<PlayerProfileResponse> pageProfiles(Long pageNum, Long pageSize, String keyword);
 
     IntegratePlayersResponse integratePlayers(IntegratePlayersRequest request);
 
-    String uploadAvatar(Long playerId, MultipartFile file);
+    String uploadAvatar(Long profileId, MultipartFile file);
 
-    ResponseEntity<Resource> previewAvatar(Long playerId);
+    ResponseEntity<Resource> previewAvatar(Long profileId);
 }
