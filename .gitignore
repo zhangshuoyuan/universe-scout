@@ -1,0 +1,72 @@
+HELP.md
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+.fastRequest
+*.iws
+*.iml
+*.ipr
+*.log
+.mvn
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+LOG_PATH_IS_UNDEFINED/
+!**/src/main/**/build/
+!**/src/test/**/build/
+auth-web/node_modules/
+auth-web/dist/
+
+### AI-Gateway-Web ###
+AI-Gateway-Web/node_modules/
+AI-Gateway-Web/dist/
+AI-Gateway-Web/.vite/
+AI-Gateway-Web/.vite-temp/
+AI-Gateway-Web/.cache/
+AI-Gateway-Web/coverage/
+AI-Gateway-Web/*.log
+AI-Gateway-Web/npm-debug.log*
+AI-Gateway-Web/yarn-debug.log*
+AI-Gateway-Web/yarn-error.log*
+AI-Gateway-Web/pnpm-debug.log*
+AI-Gateway-Web/.env
+AI-Gateway-Web/.env.*
+!AI-Gateway-Web/.env.example
+
+### Universe Scout Web ###
+universe-scout-web/node_modules/
+universe-scout-web/dist/
+universe-scout-web/.vite/
+universe-scout-web/.vite-temp/
+universe-scout-web/.cache/
+universe-scout-web/coverage/
+universe-scout-web/*.log
+universe-scout-web/npm-debug.log*
+universe-scout-web/yarn-debug.log*
+universe-scout-web/yarn-error.log*
+universe-scout-web/pnpm-debug.log*
+universe-scout-web/.env
+universe-scout-web/.env.*
+!universe-scout-web/.env.example
+
+### VS Code ###
+.vscode/
+/.fastRequest/

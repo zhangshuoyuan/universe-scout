@@ -1,0 +1,25 @@
+{
+  "name": "universe-scout-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --configLoader native --config vite.config.mjs --host 0.0.0.0",
+    "build": "vue-tsc -b && vite build --configLoader native --config vite.config.mjs",
+    "preview": "vite preview --configLoader native --config vite.config.mjs --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "^5.2.3",
+    "axios": "^1.8.4",
+    "echarts": "^5.6.0",
+    "element-plus": "^2.9.7",
+    "pinia": "^3.0.1",
+    "vite": "^6.2.2",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.2",
+    "vue-tsc": "^2.2.8"
+  }
+}
